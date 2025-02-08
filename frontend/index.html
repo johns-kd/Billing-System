@@ -292,6 +292,10 @@
 
         async function listOrders() {
             const customerEmail = document.getElementById('customer-email').value;
+            if (!customerEmail) {
+                alert('Customer email is required to list orders.');
+                return;
+            }
             const response = await fetch(`${baseUrl}/billing-api/order/order-list`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -303,7 +307,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Order ID</th>
+                            <th>S.No</th>
                             <th>Order No</th>
                             <th>Customer ID</th>
                             <th>Email</th>
@@ -319,10 +323,10 @@
                 </table>
             `;
             const tbody = orderListDiv.querySelector('tbody');
-            data.items.forEach(order => {
+            data.items.forEach((order, index) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${order.id}</td>
+                    <td>${index + 1}</td>
                     <td>${order.order_no}</td>
                     <td>${order.customer_id}</td>
                     <td>${order.email_id}</td>

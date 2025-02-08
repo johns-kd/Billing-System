@@ -50,3 +50,9 @@ Billing Process
 2 Generate Bill (Preview)
 3 Create Order & Send Invoice
 4 Order List - Download Invoice & Send Email
+
+run process
+ 1.activate virtual env - source project_env/bin/activate
+ 2. install requirements pip install -r requirements.txt
+ 3. run in backend/app/app
+ 4.commend is uvicorn --host 0.0.0.0 --port 8002 main:app --reload (ip & port update as needed )
