@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing System</title>
+    <style>
+        .separator {
+            margin: 20px 0;
+            border-top: 2px solid #000;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Billing System</h1>
+    <form id="billing-form">
+        <label for="customer-email">Customer Email:</label>
+        <input type="email" id="customer-email" name="customer-email" required>
+        
+        <div id="product-section">
+            <h3>Products</h3>
+            <div class="product-entry">
+                <label for="product-id-0">Product:</label>
+                <select id="product-id-0" name="product-id-0" required onchange="fetchProductDetails(0)">
+                    <option value="">Select Product</option>
+                </select>
+                <span id="product-name-0"></span>
+                <label for="quantity-0">Quantity:</label>
+                <input type="number" id="quantity-0" name="quantity-0" min="1" value="1" required>
+            </div>
+        </div>
+        <button type="button" onclick="addNewProduct()">Add New Product</button>
+
+        <div class="separator"></div>
+
+        <h3>Denominations</h3>
+        <label for="denomination-100">100:</label>
+        <input type="number" id="denomination-100" name="denomination-100" min="0" value="0">
+        <label for="denomination-50">50:</label>
+        <input type="number" id="denomination-50" name="denomination-50" min="0" value="0">
+        <label for="denomination-20">20:</label>
+        <input type="number" id="denomination-20" name="denomination-20" min="0" value="0">
+        <label for="denomination-10">10:</label>
+        <input type="number" id="denomination-10" name="denomination-10" min="0" value="0">
+        <label for="denomination-5">5:</label>
+        <input type="number" id="denomination-5" name="denomination-5" min="0" value="0">
+        <label for="denomination-1">1:</label>
+        <input type="number" id="denomination-1" name="denomination-1" min="0" value="0">
+
+        <div class="separator"></div>
+
+        <label for="paid-amount">Paid Amount:</label>
+        <input type="number" id="paid-amount" name="paid-amount" min="0" required>
+
+        <button type="button" onclick="generateBill()">Generate Bill</button>
+        <button type="button" id="create-order-btn" onclick="createOrder()" style="display: none;">Create Order</button> <!-- Hide initially -->
+    </form>
+
+    <div id="bill-details"></div>
+
+    <h3>Order List</h3>
+    <button type="button" onclick="listOrders()">List Orders</button>
+    <div id="order-list"></div>
+
+    <script>
+        let productCount = 1;
+        const baseUrl = 'http://192.168.1.214:8002';
+
+        async function fetchProducts() {
+            const response = await fetch(`${baseUrl}/billing-api/dropdown/product-dropdown`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+            const data = await response.json();
+            for (let i = 0; i < productCount; i++) {
+                const dropdown = document.getElementById(`product-id-${i}`);
+                if (dropdown) {
+                    const selectedValue = dropdown.value; // Save the selected value
+                    dropdown.innerHTML = '<option value="">Select Product</option>';
+                    data.data.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.id;
+                        option.text = product.name;
+                        dropdown.add(option);
+                    });
+                    dropdown.value = selectedValue; // Restore the selected value
+                }
+            }
+        }
+
+        function addNewProduct() {
+            const productSection = document.getElementById('product-section');
+            const newProductEntry = document.createElement('div');
+            newProductEntry.className = 'product-entry';
+            newProductEntry.innerHTML = `
+                <label for="product-id-${productCount}">Product:</label>
+                <select id="product-id-${productCount}" name="product-id-${productCount}" required onchange="fetchProductDetails(${productCount})">
+                    <option value="">Select Product</option>
+                </select>
+                <span id="product-name-${productCount}"></span>
+                <label for="quantity-${productCount}">Quantity:</label>
+                <input type="number" id="quantity-${productCount}" name="quantity-${productCount}" min="1" value="1" required>
+            `;
+            productSection.appendChild(newProductEntry);
+            productCount++;
+            fetchProducts();
+        }
+
+        async function fetchProductDetails(index) {
+            const productId = document.getElementById(`product-id-${index}`).value;
+            const response = await fetch(`${baseUrl}/billing-api/dropdown/product-dropdown`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ product_id: productId })
+            });
+            const data = await response.json();
+            const productNameSpan = document.getElementById(`product-name-${index}`);
+            if (data && data.data && data.data.length > 0) {
+                productNameSpan.innerText = `Product Name: ${data.data[0].name}`;
+            } else {
+                productNameSpan.innerText = 'Product not found';
+            }
+        }
+
+        async function generateBill() {
+            const customerEmail = document.getElementById('customer-email').value;
+            const paidAmount = parseFloat(document.getElementById('paid-amount').value);
+            const products = [];
+            for (let i = 0; i < productCount; i++) {
+                const productId = document.getElementById(`product-id-${i}`).value;
+                const quantity = parseInt(document.getElementById(`quantity-${i}`).value);
+                products.push({ product_id: productId, quantity: quantity });
+            }
+
+            const denominations = [
+                { amount: 100, count: parseInt(document.getElementById('denomination-100').value) },
+                { amount: 50, count: parseInt(document.getElementById('denomination-50').value) },
+                { amount: 20, count: parseInt(document.getElementById('denomination-20').value) },
+                { amount: 10, count: parseInt(document.getElementById('denomination-10').value) },
+                { amount: 5, count: parseInt(document.getElementById('denomination-5').value) },
+                { amount: 1, count: parseInt(document.getElementById('denomination-1').value) }
+            ].filter(denomination => denomination.count > 0); // Filter out denominations with count 0
+
+            const response = await fetch(`${baseUrl}/billing-api/order/demo-view`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paid_amount: paidAmount, product_list: products, denominations: denominations })
+            });
+            const data = await response.json();
+            document.getElementById('bill-details').innerText = JSON.stringify(data, null, 2);
+            showPreview(data); // Call the function to show the preview
+            document.getElementById('create-order-btn').style.display = 'block'; // Show the "Create Order" button
+        }
+
+        function showPreview(data) {
+            const previewDiv = document.getElementById('bill-details');
+            previewDiv.innerHTML = '';
+
+            // Display products in a table
+            const products = data.items;
+            const productTable = document.createElement('table');
+            productTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Product ID</th>
+                        <th>Name</th>
+                        <th>Code</th>
+                        <th>Description</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        <th>Total Price</th>
+                        <th>GST Percentage</th>
+                        <th>GST Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            `;
+            const tbody = productTable.querySelector('tbody');
+            products.forEach(product => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${product.product_id}</td>
+                    <td>${product.name}</td>
+                    <td>${product.product_code}</td>
+                    <td>${product.short_description}</td>
+                    <td>${product.actual_price}</td>
+                    <td>${product.quantity}</td>
+                    <td>${product.total_price}</td>
+                    <td>${product.tax_percentage}%</td>
+                    <td>${product.gst_amount}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            previewDiv.appendChild(productTable);
+
+            // Display denominations
+            const denominations = data.denominations;
+            const denominationDiv = document.createElement('div');
+            denominationDiv.innerHTML = '<h3>Denominations</h3>';
+            denominations.forEach(denomination => {
+                const denomItem = document.createElement('p');
+                denomItem.innerText = `${denomination.title}: ${denomination.value}`;
+                denominationDiv.appendChild(denomItem);
+            });
+            previewDiv.appendChild(denominationDiv);
+
+            // Display amount details
+            const amountDetails = data.amount_details;
+            const amountDetailsDiv = document.createElement('div');
+            amountDetailsDiv.innerHTML = '<h3>Amount Details</h3>';
+            amountDetails.forEach(detail => {
+                const detailItem = document.createElement('p');
+                detailItem.innerText = `${detail.title}: ${detail.value}`;
+                amountDetailsDiv.appendChild(detailItem);
+            });
+            previewDiv.appendChild(amountDetailsDiv);
+        }
+
+        async function createOrder() {
+            const customerEmail = document.getElementById('customer-email').value;
+            if (!customerEmail) {
+                alert('Customer email is required to create an order.');
+                return;
+            }
+            const paidAmount = parseFloat(document.getElementById('paid-amount').value);
+            const products = [];
+            for (let i = 0; i < productCount; i++) {
+                const productId = document.getElementById(`product-id-${i}`).value;
+                const quantity = parseInt(document.getElementById(`quantity-${i}`).value);
+                products.push({ product_id: productId, quantity: quantity });
+            }
+
+            const denominations = [
+                { amount: 100, count: parseInt(document.getElementById('denomination-100').value) },
+                { amount: 50, count: parseInt(document.getElementById('denomination-50').value) },
+                { amount: 20, count: parseInt(document.getElementById('denomination-20').value) },
+                { amount: 10, count: parseInt(document.getElementById('denomination-10').value) },
+                { amount: 5, count: parseInt(document.getElementById('denomination-5').value) },
+                { amount: 1, count: parseInt(document.getElementById('denomination-1').value) }
+            ].filter(denomination => denomination.count > 0); // Filter out denominations with count 0
+
+            const response = await fetch(`${baseUrl}/billing-api/order/create-order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: customerEmail, paid_amount: paidAmount, product_list: products, denominations: denominations })
+            });
+            const data = await response.json();
+            alert(`Order Created: ${data.order_id}`);
+
+            // Call export-invoice API with is_send_email set to 1
+            await fetch(`${baseUrl}/billing-api/order/export-invoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ order_id: data.order_id, email_id: customerEmail, is_send_email: 1 })
+            });
+
+            resetForm(); // Reset the form after creating an order
+            listOrders(); // Refresh the order list
+        }
+
+        function resetForm() {
+            document.getElementById('billing-form').reset();
+            document.getElementById('bill-details').innerHTML = '';
+            document.getElementById('create-order-btn').style.display = 'none';
+            productCount = 1;
+            document.getElementById('product-section').innerHTML = `
+                <h3>Products</h3>
+                <div class="product-entry">
+                    <label for="product-id-0">Product:</label>
+                    <select id="product-id-0" name="product-id-0" required onchange="fetchProductDetails(0)">
+                        <option value="">Select Product</option>
+                    </select>
+                    <span id="product-name-0"></span>
+                    <label for="quantity-0">Quantity:</label>
+                    <input type="number" id="quantity-0" name="quantity-0" min="1" value="1" required>
+                </div>
+            `;
+            fetchProducts();
+        }
+
+        async function listOrders() {
+            const customerEmail = document.getElementById('customer-email').value;
+            const response = await fetch(`${baseUrl}/billing-api/order/order-list`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ email: customerEmail })
+            });
+            const data = await response.json();
+            const orderListDiv = document.getElementById('order-list');
+            orderListDiv.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Order No</th>
+                            <th>Customer ID</th>
+                            <th>Email</th>
+                            <th>Total Amount</th>
+                            <th>Paid Amount</th>
+                            <th>Balance Amount</th>
+                            <th>Created At</th>
+                            <th>Invoice</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            `;
+            const tbody = orderListDiv.querySelector('tbody');
+            data.items.forEach(order => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${order.id}</td>
+                    <td>${order.order_no}</td>
+                    <td>${order.customer_id}</td>
+                    <td>${order.email_id}</td>
+                    <td>${order.total_amount}</td>
+                    <td>${order.paid_amount}</td>
+                    <td>${order.balance_amount}</td>
+                    <td>${order.created_at}</td>
+                    <td><button onclick="downloadInvoice(${order.id}, '${order.email_id}')">Download</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function downloadInvoice(orderId, email) {
+            const isSendEmail = confirm("Do you want to send the invoice via email?");
+            const response = await fetch(`${baseUrl}/billing-api/order/export-invoice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ order_id: orderId, email_id: email, is_send_email: isSendEmail ? 1 : 0 })
+            });
+            const data = await response.json();
+            if (data.status === 1) {
+                if (isSendEmail) {
+                    alert("Invoice sent via email successfully.");
+                }
+                window.open(data.file_url, '_blank'); // Always download the file
+            } else {
+                alert("Failed to process the request.");
+            }
+        }
+
+        fetchProducts();
+    </script>
+</body>
+</html>
